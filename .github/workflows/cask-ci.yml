@@ -1,0 +1,182 @@
+name: Cask CI
+
+# Valida i cask di questo tap: stile, caricamento, install reale su macOS, audit
+# online degli asset. Gira anche sui commit del bot — GoReleaser pusha con un PAT,
+# quindi i workflow partono — e ogni lunedì, per accorgersi di una release i cui
+# asset sono stati cancellati o di uno sha256 che non torna più.
+#
+# Nota tecnica: i cask devono stare dentro un tap (`brew info --cask ./Casks/x.rb`
+# viene rifiutato con "Homebrew requires casks to be in a tap"), quindi ogni job
+# copia il checkout in Library/Taps con scripts/ci-place-tap.sh e poi lavora per
+# token (allan-nava/tap/<cask>).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 7 * * 1" # lunedì 07:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cask-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: "1"
+  HOMEBREW_NO_INSTALL_CLEANUP: "1"
+  HOMEBREW_NO_ANALYTICS: "1"
+  # Homebrew 6+ chiede di "trustare" i tap di terze parti: in headless quel gate
+  # farebbe fallire l'install.
+  HOMEBREW_NO_REQUIRE_TAP_TRUST: "1"
+
+jobs:
+  lint:
+    name: Style & load
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Place the checkout as the tap
+        run: scripts/ci-place-tap.sh
+
+      - name: brew style (solo i cask)
+        # Si stilano i FILE dei cask, non il tap: `brew style allan-nava/tap`
+        # passerebbe anche shellcheck+shfmt sugli script, e `brew style --fix`
+        # corrompe l'heredoc di render-desktop-cask.sh (verificato: tronca il
+        # template). Gli script hanno il job `shellcheck` qui sotto.
+        #
+        # Cask/Desc ("A fleet of...") e Layout/EmptyLinesAroundBlockBody sono
+        # offense del cask generato da GoReleaser: non correggibili qui, il file
+        # viene riscritto a ogni release (HT-2 — togliere l'esclusione quando
+        # upstream cambia `description:`).
+        run: |
+          set -euo pipefail
+          tap="$(brew --repository)/Library/Taps/allan-nava/homebrew-tap"
+          brew style --except-cops Cask/Desc,Layout/EmptyLinesAroundBlockBody "$tap"/Casks/*.rb
+
+      - name: Ogni cask si carica
+        run: |
+          set -euo pipefail
+          for f in Casks/*.rb; do
+            token="$(basename "$f" .rb)"
+            echo "::group::$token"
+            brew info --cask "allan-nava/tap/$token"
+            echo "::endgroup::"
+          done
+
+  shellcheck:
+    name: Shellcheck
+    runs-on: ubuntu-latest # shellcheck è preinstallato, niente brew da tirare su
+    steps:
+      - uses: actions/checkout@v5
+      - run: shellcheck scripts/*.sh
+
+  install-cli:
+    name: Install checkfleet (${{ matrix.os }})
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-13] # arm64, intel — i due rami del cask generato
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Place the checkout as the tap
+        run: scripts/ci-place-tap.sh
+
+      - name: Install
+        run: brew install --cask allan-nava/tap/checkfleet
+
+      - name: La versione installata è quella del cask
+        run: |
+          set -euo pipefail
+          want="$(brew info --json=v2 --cask allan-nava/tap/checkfleet | jq -r '.casks[0].version')"
+          got="$(checkfleet version)"
+          echo "cask=$want binario='$got'"
+          # Non basta che sia "una versione": deve essere ESATTAMENTE quella del
+          # cask, altrimenti il cask punta a una release sbagliata.
+          test "$got" = "checkfleet $want"
+
+      - name: L'attributo di quarantine è stato rimosso
+        run: |
+          set -euo pipefail
+          bin="$(readlink -f "$(which checkfleet)")"
+          if xattr -l "$bin" 2>/dev/null | grep -qi com.apple.quarantine; then
+            echo "::error::$bin ha ancora com.apple.quarantine — postflight non ha funzionato"
+            exit 1
+          fi
+          echo "nessuna quarantine ✅"
+
+      - name: Smoke — un check gira davvero
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/cf.yml" <<'YAML'
+          checks:
+            tcp:
+              targets:
+                - {name: github, address: github.com:443, tls: true}
+          YAML
+          # L'exit code è 0 anche con WARN/BAD (solo gli errori sistemici sono
+          # diversi da 0), quindi qui si verifica solo che il modulo esegua.
+          checkfleet check tcp --config "$RUNNER_TEMP/cf.yml" --output markdown
+
+      - name: Uninstall
+        if: always()
+        run: brew uninstall --cask checkfleet || true
+
+  install-desktop:
+    name: Install checkfleet-desktop
+    needs: lint
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Place the checkout as the tap
+        run: scripts/ci-place-tap.sh
+
+      - name: Install
+        run: brew install --cask allan-nava/tap/checkfleet-desktop
+
+      - name: Il bundle è al suo posto e non è in quarantine
+        run: |
+          set -euo pipefail
+          app="/Applications/checkfleet.app"
+          test -d "$app"
+          test -x "$app/Contents/MacOS/checkfleet-desktop"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$app/Contents/Info.plist"
+          if xattr -l "$app" 2>/dev/null | grep -qi com.apple.quarantine; then
+            echo "::error::$app ha ancora com.apple.quarantine — postflight non ha funzionato"
+            exit 1
+          fi
+          echo "bundle ok, nessuna quarantine ✅"
+
+      - name: Uninstall
+        if: always()
+        run: brew uninstall --cask --zap checkfleet-desktop || true
+
+  audit:
+    name: Audit online
+    needs: lint
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Place the checkout as the tap
+        run: scripts/ci-place-tap.sh
+
+      - name: brew audit --cask --online
+        # Scarica gli asset: è questo che scopre un url morto o uno sha256
+        # sbagliato prima che ci finisca dentro un utente.
+        run: |
+          set -euo pipefail
+          for f in Casks/*.rb; do
+            token="$(basename "$f" .rb)"
+            echo "::group::$token"
+            brew audit --cask --online "allan-nava/tap/$token"
+            echo "::endgroup::"
+          done

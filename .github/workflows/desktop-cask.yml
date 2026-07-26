@@ -1,0 +1,124 @@
+name: Desktop cask
+
+# Aggiorna Casks/checkfleet-desktop.rb quando esce una release di checkfleet.
+#
+# Perché serve un workflow qui (HT-4): l'app desktop (Wails) NON la builda
+# goreleaser ma il workflow `desktop.yml` upstream, che allega lo zip alla release
+# dopo che questa esiste. GoReleaser quindi non conosce quell'asset e non può
+# generare il cask: lo rende questo repo, con scripts/render-desktop-cask.sh.
+#
+# Trigger:
+#   - repository_dispatch `checkfleet-desktop-release` → aggiornamento immediato
+#     (da attivare upstream, serve un PAT: HT-5);
+#   - cron ogni 6 ore → funziona già oggi senza toccare upstream, con al massimo
+#     qualche ora di ritardo;
+#   - manuale, anche su un tag specifico.
+
+on:
+  repository_dispatch:
+    types: [checkfleet-desktop-release]
+  schedule:
+    - cron: "20 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag upstream (vX.Y.Z); vuoto = ultima release"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+# Un solo writer alla volta su questo repo, e mai cancellare una scrittura a metà.
+concurrency:
+  group: tap-write
+  cancel-in-progress: false
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: "1"
+  HOMEBREW_NO_ANALYTICS: "1"
+  # Senza questo Homebrew 6+ pretende il "trust" del tap e i comandi headless
+  # sul tap appena piazzato falliscono.
+  HOMEBREW_NO_REQUIRE_TAP_TRUST: "1"
+
+jobs:
+  render:
+    name: Render & commit
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Render del cask
+        id: render
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Via env, non interpolato nello script: il valore arriva da input o da
+          # payload di dispatch.
+          TAG: ${{ github.event.inputs.tag || github.event.client_payload.tag || '' }}
+        run: |
+          set -uo pipefail
+          # GitHub esegue gli step con `bash -e`: senza spegnere -e l'exit 2
+          # (skip) ucciderebbe lo step prima del case qui sotto.
+          set +e
+          if [ -n "$TAG" ]; then
+            scripts/render-desktop-cask.sh "$TAG"
+          else
+            scripts/render-desktop-cask.sh
+          fi
+          rc=$?
+          set -e
+          case "$rc" in
+            0) ;;
+            # exit 2 = asset desktop non ancora pubblicato per quel tag: non è un
+            # guasto, il prossimo giro lo troverà.
+            2) echo "::notice::asset desktop non ancora disponibile, skip"
+               echo "skip=true" >> "$GITHUB_OUTPUT" ;;
+            *) exit "$rc" ;;
+          esac
+
+      - name: C'è qualcosa da committare?
+        id: diff
+        if: steps.render.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- Casks/checkfleet-desktop.rb; then
+            echo "cask già aggiornato, niente da fare"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git --no-pager diff -- Casks/checkfleet-desktop.rb
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Gate prima di pushare: un cask che non passa style o non si carica non
+      # deve arrivare su main.
+      - name: Valida il cask appena reso
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          scripts/ci-place-tap.sh
+          # Sul file, non sul tap: brew style su un tap passa anche shfmt sugli
+          # script e quel formatter corrompe l'heredoc del renderer.
+          brew style --except-cops Cask/Desc,Layout/EmptyLinesAroundBlockBody \
+            "$(brew --repository)/Library/Taps/allan-nava/homebrew-tap/Casks/checkfleet-desktop.rb"
+          brew info --cask allan-nava/tap/checkfleet-desktop
+
+      - name: Commit & push
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^  version "\(.*\)"$/\1/p' Casks/checkfleet-desktop.rb)"
+          test -n "$version"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/checkfleet-desktop.rb
+          git commit -m "Brew cask update for checkfleet-desktop version v${version}"
+          # GoReleaser pusha qui durante la release del CLI: se ci ha battuto sul
+          # tempo ci si rebasa sopra invece di fallire.
+          for i in 1 2 3; do
+            if git pull --rebase --autostash origin main && git push origin HEAD:main; then
+              exit 0
+            fi
+            sleep $((i * 10))
+          done
+          echo "::error::push non riuscito dopo 3 tentativi"
+          exit 1
