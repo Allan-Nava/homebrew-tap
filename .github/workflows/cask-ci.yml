@@ -180,3 +180,88 @@ jobs:
             brew audit --cask --online "allan-nava/tap/$token"
             echo "::endgroup::"
           done
+
+  upstream-fixes:
+    name: Fix upstream arrivati?
+    # Gira sui push (cioè anche sul commit del bot che porta un cask nuovo): è
+    # lì che un fix rilasciato upstream diventa visibile.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Audita il cask e apri/chiudi le issue dei fix
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          scripts/check-upstream-fixes.sh | tee fixes.tsv
+          while IFS=$'\t' read -r status id msg <&3; do
+            title="Fix upstream arrivato: $id"
+            if [ "$status" = "landed" ]; then
+              {
+                printf '%s\n\n' "$msg"
+                printf 'Rilevato da `scripts/check-upstream-fixes.sh` su `Casks/checkfleet.rb`.\n\n'
+                printf 'Run: %s/%s/actions/runs/%s\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
+              } > body.md
+              scripts/gh-issue.sh ensure-open "$title" body.md backlog
+            else
+              scripts/gh-issue.sh ensure-closed "$title" "Non più attuale: il cask generato non contiene (più) il fix."
+            fi
+          done 3< fixes.tsv
+
+  report:
+    name: Stato del tap
+    # Chiude il cerchio dell'audit: se qualcosa è rosso apre UNA issue e la
+    # richiude appena torna verde (niente mail perse in Actions).
+    needs: [lint, shellcheck, install-cli, install-desktop, audit]
+    if: always() && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Apri/chiudi la issue di stato
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          R_LINT: ${{ needs.lint.result }}
+          R_SHELLCHECK: ${{ needs.shellcheck.result }}
+          R_CLI: ${{ needs['install-cli'].result }}
+          R_DESKTOP: ${{ needs['install-desktop'].result }}
+          R_AUDIT: ${{ needs.audit.result }}
+        run: |
+          set -euo pipefail
+          title="Tap rotto: la CI dei cask è rossa"
+          # L'elenco va in un file, non in una variabile multi-riga: dentro un
+          # blocco YAML le righe successive porterebbero l'indentazione con sé e
+          # nel markdown della issue diventerebbero un blocco di codice.
+          : > failed.md
+          for pair in "style/load:$R_LINT" "shellcheck:$R_SHELLCHECK" "install CLI:$R_CLI" \
+                      "install desktop:$R_DESKTOP" "audit online:$R_AUDIT"; do
+            name="${pair%%:*}"
+            result="${pair##*:}"
+            case "$result" in
+              success | skipped) ;;
+              *) printf -- '- %s (`%s`)\n' "$name" "$result" >> failed.md ;;
+            esac
+          done
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          if [ -s failed.md ]; then
+            {
+              printf 'La CI del tap ha fallito su:\n\n'
+              cat failed.md
+              printf '\nCosa vuol dire di solito: asset di release spariti o sha256 che non torna '
+              printf '(audit), cask che non si carica (style/load), postflight o versione sbagliata (install).\n\n'
+              printf 'Run: %s\n' "$run_url"
+            } > body.md
+            scripts/gh-issue.sh ensure-open "$title" body.md tap-broken
+            exit 0
+          fi
+          scripts/gh-issue.sh ensure-closed "$title" "CI verde di nuovo: $run_url"

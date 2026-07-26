@@ -12,6 +12,7 @@ Questo file definisce le regole operative per gli agent (Copilot, Claude, altri 
 - **Niente CHANGELOG/tag qui**: il versioning vive nel repo del progetto. La history è quasi tutta bot (`Brew cask update for <tool> version vX.Y.Z`): non inquinarla.
 - **Gate prima di chiudere** (se si tocca un cask, uno script o un workflow): `brew style` + `brew audit --cask --online` verdi e il cask che si carica (`brew info --cask`). I cask **devono stare dentro un tap**: usare `scripts/ci-place-tap.sh` e poi lavorare per token, non per path.
 - **Todo → `BACKLOG.md`** (id stabili `HT-n`), niente TODO sparsi nei file. Gli item che si chiudono upstream lo dicono esplicitamente.
+- **Le issue sono generate dal backlog**: `scripts/backlog-sync.sh` (workflow `backlog-sync.yml`) crea/chiude/riapre una issue per `HT-n`. **Mai aprire o chiudere issue a mano** — si spunta l'item nel BACKLOG. Le altre due issue automatiche (`Fix upstream arrivato: HT-n`, `Tap rotto: la CI dei cask è rossa`) le gestisce `scripts/gh-issue.sh`: idempotenti per titolo, non commentano a ogni run.
 - **Niente segreti** nel repo: `HOMEBREW_TAP_GITHUB_TOKEN` è un secret della CI upstream, non compare mai qui.
 
 ## Comandi
@@ -23,6 +24,9 @@ brew info --cask allan-nava/tap/checkfleet
 brew audit --cask --online allan-nava/tap/checkfleet
 brew install --cask allan-nava/tap/checkfleet     # HOMEBREW_NO_REQUIRE_TAP_TRUST=1 in headless
 scripts/render-desktop-cask.sh [vX.Y.Z]  # rigenera il cask desktop dalla release
+scripts/backlog-sync.sh --dry-run        # cosa farebbe il sync BACKLOG.md → issue
+scripts/check-upstream-fixes.sh          # TSV: quali fix upstream sono atterrati
+DRY_RUN=1 scripts/gh-issue.sh ensure-open "<titolo>" body.md <label>
 ```
 
 ## Trappole note

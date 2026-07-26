@@ -1,0 +1,37 @@
+name: Backlog sync
+
+# Tiene le issue allineate a BACKLOG.md (sorgente unica): ogni item HT-n → una
+# issue con label `backlog`, raggruppata per milestone = sezione. Spuntare un
+# item lo chiude, togliere la spunta lo riapre. Idempotente.
+#
+# Stesso schema del repo upstream (`backlog-sync` di checkfleet), ma in shell:
+# qui non c'è toolchain Go e non ha senso portarcela per un tap.
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "BACKLOG.md"
+      - "scripts/backlog-sync.sh"
+      - ".github/workflows/backlog-sync.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: backlog-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Sync backlog → issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: scripts/backlog-sync.sh

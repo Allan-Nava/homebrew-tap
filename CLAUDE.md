@@ -12,6 +12,7 @@
 - **Qui non si taggia e non c'è CHANGELOG**: versioning e release vivono nel repo del progetto. La history di questo repo è quasi interamente bot: non inquinarla con commit rumorosi.
 - **Gate prima di chiudere** (cask, script o workflow toccati): `scripts/ci-place-tap.sh` + `brew style` + `brew info --cask` + `brew audit --cask --online` verdi. Se si cambia il cask desktop, rigenerarlo davvero con lo script e verificare il diff.
 - **Todo → `BACKLOG.md`** (sorgente unica, id stabili `HT-n`). Gli item che vanno chiusi upstream lo dichiarano; non si "aggirano" toccando `Casks/`.
+- **Le issue si generano dal backlog, non a mano**: `scripts/backlog-sync.sh` (workflow `backlog-sync.yml`) tiene una issue per ogni `HT-n` — spuntare l'item la chiude, togliere la spunta la riapre. Aprire o chiudere issue a mano crea divergenza col file. Le due issue di stato (`Fix upstream arrivato: HT-n` dal watcher, `Tap rotto: la CI dei cask è rossa` dal report della CI) passano da `scripts/gh-issue.sh`, idempotente per titolo: apre se manca, riapre se chiusa, tace se già aperta.
 - **Niente segreti**: `HOMEBREW_TAP_GITHUB_TOKEN` (il token con cui GoReleaser pusha qui) è un secret della CI di checkfleet e non deve mai comparire in questo repo.
 - Il README è l'unica doc user-facing: se cambiano i comandi d'installazione o si aggiunge un cask, aggiornarlo.
 
@@ -26,6 +27,9 @@ brew install --cask allan-nava/tap/checkfleet    # in headless: HOMEBREW_NO_REQU
 brew reinstall --cask checkfleet                 # ri-esegue il postflight (quarantine)
 brew uninstall --cask --zap checkfleet-desktop
 scripts/render-desktop-cask.sh [vX.Y.Z]          # rigenera il cask desktop (default: ultima release)
+scripts/backlog-sync.sh --dry-run                # anteprima del sync BACKLOG.md → issue
+scripts/check-upstream-fixes.sh                  # TSV landed/pending dei fix attesi da upstream
+DRY_RUN=1 scripts/gh-issue.sh ensure-open "<titolo>" body.md <label>
 ```
 
 ## Struttura
@@ -35,6 +39,10 @@ scripts/render-desktop-cask.sh [vX.Y.Z]          # rigenera il cask desktop (def
 - `scripts/render-desktop-cask.sh` — risolve l'asset `checkfleet-desktop_v*_darwin_universal.zip` della release, calcola lo sha256, verifica che il bundle sia alla radice dello zip e che il nome dell'asset combaci con l'url interpolato (`v#{version}`), poi rende il cask. Exit 2 = asset non ancora pubblicato → il workflow lo tratta come skip.
 - `scripts/ci-place-tap.sh` — copia il checkout in `Library/Taps/allan-nava/homebrew-tap` (i cask fuori da un tap sono rifiutati da Homebrew).
 - `.github/workflows/cask-ci.yml` — style + load, install su `macos-14`/`macos-13` (la versione del binario deve combaciare con quella del cask, quarantine rimossa, smoke `check tcp`), install del bundle desktop, `audit --online`. Su push/PR, lunedì, e a mano.
+- `scripts/backlog-sync.sh` — parser awk di `BACKLOG.md` (item `HT-n`, milestone = sezione) + reconcile delle issue via `gh`, idempotente, `--dry-run`. Il ciclo legge gli item dal **fd 3** perché sullo stdin ci sono i comandi `gh`.
+- `scripts/check-upstream-fixes.sh` — audit del cask generato: dice quali fix attesi da upstream (HT-1/HT-2/HT-7) sono atterrati. TSV `landed|pending`, exit 0 sempre.
+- `scripts/gh-issue.sh` — issue idempotente per titolo (`ensure-open` / `ensure-closed`), usata dal watcher dei fix e dal report della CI. `DRY_RUN=1` per provare.
+- `.github/workflows/backlog-sync.yml` — sync backlog → issue su push che toccano `BACKLOG.md`/lo script/il workflow, e a mano.
 - `.github/workflows/desktop-cask.yml` — rigenera e committa il cask desktop: `repository_dispatch` (`checkfleet-desktop-release`, da attivare upstream — HT-5), cron ogni 6h, manuale con tag. Valida prima di pushare, `concurrency: tap-write`, `pull --rebase` + retry.
 
 ## Trappole note / regole tecniche
