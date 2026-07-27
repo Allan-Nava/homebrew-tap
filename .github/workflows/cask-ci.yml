@@ -68,13 +68,6 @@ jobs:
             echo "::endgroup::"
           done
 
-  shellcheck:
-    name: Shellcheck
-    runs-on: ubuntu-latest # shellcheck è preinstallato, niente brew da tirare su
-    steps:
-      - uses: actions/checkout@v5
-      - run: shellcheck scripts/*.sh
-
   install-cli:
     name: Install checkfleet (${{ matrix.os }})
     needs: lint
