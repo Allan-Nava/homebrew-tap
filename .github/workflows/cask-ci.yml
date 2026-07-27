@@ -68,6 +68,27 @@ jobs:
             echo "::endgroup::"
           done
 
+  shellcheck:
+    name: Lint script & workflow
+    runs-on: ubuntu-latest # shellcheck e ruby sono preinstallati, niente da installare
+    steps:
+      - uses: actions/checkout@v5
+
+      # Gli script si controllano con shellcheck normale, non con `brew style`
+      # sul tap: quello usa la house-style di Homebrew (shellcheck+shfmt) e il
+      # suo formatter tronca l'heredoc di render-desktop-cask.sh.
+      #
+      # Con le impostazioni di default questo job è verde: le SC2016 sui
+      # backtick markdown di backlog-sync.sh sono disattivate nel file, con la
+      # motivazione accanto.
+      - name: shellcheck
+        run: shellcheck scripts/*.sh
+
+      - name: Riferimenti tra job coerenti
+        # Un `needs:` verso un job cancellato non dà un errore leggibile: il
+        # workflow diventa invalido e il run fallisce senza job né log.
+        run: scripts/check-workflows.rb
+
   install-cli:
     name: Install checkfleet (${{ matrix.os }})
     needs: lint

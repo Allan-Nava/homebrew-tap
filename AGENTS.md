@@ -24,6 +24,8 @@ brew info --cask allan-nava/tap/checkfleet
 brew audit --cask --online allan-nava/tap/checkfleet
 brew install --cask allan-nava/tap/checkfleet     # HOMEBREW_NO_REQUIRE_TAP_TRUST=1 in headless
 scripts/render-desktop-cask.sh [vX.Y.Z]  # rigenera il cask desktop dalla release
+shellcheck scripts/*.sh                  # gli script devono restare verdi
+scripts/check-workflows.rb               # needs coerenti fra i job dei workflow
 scripts/backlog-sync.sh --dry-run        # cosa farebbe il sync BACKLOG.md → issue
 scripts/check-upstream-fixes.sh          # TSV: quali fix upstream sono atterrati
 DRY_RUN=1 scripts/gh-issue.sh ensure-open "<titolo>" body.md <label>

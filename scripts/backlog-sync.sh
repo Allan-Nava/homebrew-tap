@@ -91,7 +91,10 @@ unchanged=0
 
 # Il ciclo legge dal fd 3: sullo stdin ci sono i comandi gh, che altrimenti si
 # mangerebbero le righe rimanenti degli item.
-while IFS=$'\t' read -r id done title milestone desc <&3; do
+#
+# La variabile si chiama is_done e non done: con `read ... done` il linter
+# (SC1010) crede che il ciclo finisca lì, ed è comunque un nome da evitare.
+while IFS=$'\t' read -r id is_done title milestone desc <&3; do
   [ -n "$id" ] || continue
 
   found="$(printf '%s' "$issues_json" |
@@ -100,6 +103,9 @@ while IFS=$'\t' read -r id done title milestone desc <&3; do
   number="${found%%$'\t'*}"
   state="${found#*$'\t'}"
 
+  # Gli apici singoli sono voluti: i backtick qui sono markdown per il corpo
+  # della issue, non command substitution (SC2016).
+  # shellcheck disable=SC2016
   body="$(
     printf '%s\n\n---\n' "$desc"
     printf 'Tracciata in `BACKLOG.md` (**%s**) · milestone _%s_.\n\n' "$id" "$milestone"
@@ -117,18 +123,18 @@ while IFS=$'\t' read -r id done title milestone desc <&3; do
       fi
       url="$(gh "${args[@]}" </dev/null)"
       # Un item già fatto entra come issue chiusa: serve la storia, non un todo.
-      if [ "$done" = "1" ]; then
+      if [ "$is_done" = "1" ]; then
         gh issue close "${url##*/}" --comment "Già completata in BACKLOG.md." </dev/null >/dev/null
       fi
     fi
     continue
   fi
 
-  if [ "$done" = "1" ] && [ "$state" = "OPEN" ]; then
+  if [ "$is_done" = "1" ] && [ "$state" = "OPEN" ]; then
     closed=$((closed + 1))
     echo "  chiudo   $id (#$number)"
     run_gh issue close "$number" --comment "Completata: item spuntato in BACKLOG.md." >/dev/null
-  elif [ "$done" = "0" ] && [ "$state" = "CLOSED" ]; then
+  elif [ "$is_done" = "0" ] && [ "$state" = "CLOSED" ]; then
     reopened=$((reopened + 1))
     echo "  riapro   $id (#$number)"
     run_gh issue reopen "$number" >/dev/null

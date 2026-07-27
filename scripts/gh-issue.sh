@@ -22,7 +22,9 @@ usage() {
   echo "uso: $0 ensure-open <titolo> <file-body> [label...] | ensure-closed <titolo> <commento>" >&2
   exit 1
 }
-[ -n "$action" ] && [ -n "$title" ] || usage
+if [ -z "$action" ] || [ -z "$title" ]; then
+  usage
+fi
 
 command -v gh >/dev/null || { echo "gh-issue: serve gh" >&2; exit 1; }
 command -v jq >/dev/null || { echo "gh-issue: serve jq" >&2; exit 1; }
