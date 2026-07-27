@@ -68,6 +68,13 @@ jobs:
             echo "::endgroup::"
           done
 
+      - name: Ogni cask si carica su ogni OS/arch
+        # `brew info --cask` valuta solo i rami dell'OS su cui gira: da macOS il
+        # ramo `on_linux` di checkfleet.rb non viene mai caricato. Era l'unica
+        # cosa che `brew test-bot --only-tap-syntax` faceva in più (workflow
+        # rimosso con HT-19 perché rosso per costruzione); qui costa una riga.
+        run: brew readall --aliases --os=all --arch=all allan-nava/tap
+
   shellcheck:
     name: Lint script & workflow
     runs-on: ubuntu-latest # shellcheck e ruby sono preinstallati, niente da installare
@@ -262,7 +269,13 @@ jobs:
             name="${pair%%:*}"
             result="${pair##*:}"
             case "$result" in
-              success | skipped) ;;
+              # `cancelled` non è un fallimento del tap: con
+              # cancel-in-progress un push che ne segue un altro cancella il run
+              # precedente (o una leg della matrice). Trattarlo come rosso apre
+              # la issue a sproposito — visto succedere sul run 30242314155,
+              # dove install-cli (macos-13) è stato cancellato e tutto il resto
+              # era verde. Il run successivo dirà la verità.
+              success | skipped | cancelled) ;;
               *) printf -- '- %s (`%s`)\n' "$name" "$result" >> failed.md ;;
             esac
           done

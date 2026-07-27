@@ -45,7 +45,9 @@ files.each do |file|
            dumped.scan(/needs\[['"]([A-Za-z0-9_-]+)['"]\]\.result/).flatten
     used.uniq.each do |dep|
       problems << "#{file}: il job '#{name}' legge needs.#{dep}.result ma non esiste" unless jobs.key?(dep)
-      problems << "#{file}: il job '#{name}' legge needs.#{dep}.result senza dichiararlo in needs" unless declared.include?(dep)
+      next if declared.include?(dep)
+
+      problems << "#{file}: il job '#{name}' legge needs.#{dep}.result senza dichiararlo in needs"
     end
   end
 
