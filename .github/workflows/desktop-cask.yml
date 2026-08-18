@@ -98,7 +98,12 @@ jobs:
           scripts/ci-place-tap.sh
           # Sul file, non sul tap: brew style su un tap passa anche shfmt sugli
           # script e quel formatter corrompe l'heredoc del renderer.
-          brew style --except-cops Cask/Desc,Layout/EmptyLinesAroundBlockBody \
+          #
+          # Senza `--except-cops`: questo cask lo rende il nostro template, non
+          # GoReleaser, quindi un'offense qui è un bug nel template e va corretta
+          # invece di esclusa (le esclusioni valgono solo per i cask generati —
+          # vedi il bucket in cask-ci.yml, job `lint`).
+          brew style \
             "$(brew --repository)/Library/Taps/allan-nava/homebrew-tap/Casks/checkfleet-desktop.rb"
           brew info --cask allan-nava/tap/checkfleet-desktop
 
