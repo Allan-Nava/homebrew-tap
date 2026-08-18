@@ -32,6 +32,19 @@ env:
   # Homebrew 6+ chiede di "trustare" i tap di terze parti: in headless quel gate
   # farebbe fallire l'install.
   HOMEBREW_NO_REQUIRE_TAP_TRUST: "1"
+  # `brew audit --online` interroga l'API di GitHub (repo, release, asset). Senza
+  # token sono **60 richieste/ora per IP**, e l'IP di un runner hosted è condiviso
+  # con chiunque altro stia buildando da quella macchina: con quattro cask da
+  # auditare ci siamo finiti dentro davvero — `API rate limit exceeded for
+  # 13.105.117.157 ... Rate limit exceeded for core resource (60 limit)`.
+  #
+  # Homebrew tratta l'eccezione come errore di audit (`cask/audit.rb` → `add_error
+  # "exception while auditing ..."`, poi `ofail`), quindi il job va **rosso** e il
+  # job `report` apre "Tap rotto" — per un motivo che col tap non c'entra nulla: un
+  # audit che non ha auditato. Il GITHUB_TOKEN del run porta il limite a 1000/ora,
+  # è già disponibile e qui è read-only (`permissions: contents: read`): nessun
+  # secret da creare, nessun PAT che scade.
+  HOMEBREW_GITHUB_API_TOKEN: ${{ github.token }}
 
 jobs:
   lint:

@@ -40,6 +40,10 @@ env:
   # Senza questo Homebrew 6+ pretende il "trust" del tap e i comandi headless
   # sul tap appena piazzato falliscono.
   HOMEBREW_NO_REQUIRE_TAP_TRUST: "1"
+  # Stessa ragione di cask-ci.yml: le chiamate di Homebrew all'API di GitHub senza
+  # token sono 60/ora per IP condiviso. Qui il token serve anche al renderer, che
+  # risolve l'asset della release via `gh`.
+  HOMEBREW_GITHUB_API_TOKEN: ${{ github.token }}
 
 jobs:
   render:

@@ -37,6 +37,7 @@ DRY_RUN=1 scripts/gh-issue.sh ensure-open "<titolo>" body.md <label>
 
 ## Trappole note
 
+- **`brew audit --online` vuole un token GitHub**: senza, sono 60 richieste/ora per IP (condiviso, sui runner) e l'audit fallisce con `exception while auditing <cask>` — job rosso per un problema che non è del tap. In CI c'è già nell'`env` dei workflow; in locale `HOMEBREW_GITHUB_API_TOKEN="$(gh auth token)"` (HT-24).
 - **I cask fuori da un tap sono rifiutati**: `brew info --cask ./Casks/x.rb` → "Homebrew requires casks to be in a tap". Ogni validazione passa da `scripts/ci-place-tap.sh`.
 - **`brew style` ignora un `.rubocop.yml` del tap** (usa il suo, `Library/.rubocop.yml`; `--config` dalla CLI non esiste: `Error: invalid option`): le esclusioni vivono in `--except-cops` nei workflow. Valgono **solo per i cask generati da GoReleaser** — il job `lint` divide i file sul marker `DO NOT EDIT` e stila senza esclusioni quelli resi da noi (HT-22). Ogni cop escluso per colpa nostra ha un item che lo riporta a zero: `Cask/Desc` → HT-2, `Style/NumericPredicate` → HT-21.
 - **MAI `brew style --fix`, e mai `brew style` su tutto il tap**: su un tap Homebrew passa anche shellcheck+shfmt sugli script, e il formatter **tronca l'heredoc** di `render-desktop-cask.sh` (verificato: il cask reso perde tutto dopo `postflight do`). Si stilano solo i file `Casks/*.rb`; gli script hanno un job shellcheck a parte.
