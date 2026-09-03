@@ -1,0 +1,168 @@
+name: Cask sync
+
+# Sorveglia — e ripara — il drift fra la `version` di ogni cask generato e
+# l'ultima release stabile del progetto upstream.
+#
+# Perché (HT-26): il tap si aggiorna da sé perché GoReleaser pusha qui a ogni tag
+# `v*`. Quel push però ha un modo di fallire che non accende nessuna spia: i PAT
+# fine-grained scadono per forza, e quando scadono la release upstream pubblica
+# archivi e immagine e poi muore sull'ultimo passo. Da quel momento il tap serve
+# una versione vecchia e **tutto è verde**: il cask si carica, l'audit passa, la
+# CI è contenta. L'unico modo di accorgersene è confrontare con upstream, che è
+# esattamente ciò che `livecheck { skip }` (voluto, HT-15) non fa.
+#
+# Qui il confronto lo fa `scripts/sync-cask-versions.sh`: in `--check` dice chi è
+# in drift, in `--apply` riscrive `version` e i `sha256` **scaricando gli asset
+# veri** della release (mai un bump a mano) e committa. La issue resta aperta
+# comunque, perché il sync cura il sintomo: la causa (token scaduto upstream) va
+# sistemata nel repo del progetto, o al prossimo tag si ricomincia.
+
+on:
+  schedule:
+    # Sfasato dal cron di desktop-cask.yml (`20 */6`): sono due writer sullo
+    # stesso repo e condividono il gruppo di concurrency `tap-write`.
+    - cron: "50 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      check_only:
+        description: "Solo diagnosi: rileva il drift senza riscrivere niente"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  issues: write
+
+# Un solo writer alla volta sul tap, e mai cancellare una scrittura a metà.
+concurrency:
+  group: tap-write
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Drift dei cask
+    # ubuntu e non macOS: lo script vuole solo gh, curl e sha256sum. La
+    # validazione vera (style, load, install, audit) la fa Cask CI sul push che
+    # questo job produce — non serve pagare un runner macOS per rifarla qui.
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: C'è drift?
+        id: check
+        run: |
+          set -euo pipefail
+          scripts/sync-cask-versions.sh --check | tee sync.tsv
+          {
+            echo '| stato | cask | tap | upstream |'
+            echo '| --- | --- | --- | --- |'
+            awk -F'\t' '{printf "| %s | `%s` | %s | %s |\n", $1, $2, $3, $4}' sync.tsv
+          } >> "$GITHUB_STEP_SUMMARY"
+          n="$(awk -F'\t' '$1 == "drift"' sync.tsv | wc -l | tr -d ' ')"
+          echo "drift=$n" >> "$GITHUB_OUTPUT"
+          echo "cask in drift: $n"
+
+      - name: Risincronizza dagli asset della release
+        id: apply
+        if: steps.check.outputs.drift != '0' && inputs.check_only != true
+        run: |
+          set -euo pipefail
+          scripts/sync-cask-versions.sh --apply | tee applied.tsv
+
+      - name: I cask riscritti sono ancora file Ruby validi
+        if: steps.apply.outcome == 'success' && steps.check.outputs.drift != '0' && inputs.check_only != true
+        run: |
+          set -euo pipefail
+          changed="$(git diff --name-only -- Casks)"
+          [ -n "$changed" ] || { echo "niente da validare"; exit 0; }
+          # `ruby -c` non valuta il DSL del cask: controlla solo che il file sia
+          # parsabile. Basta a non pushare un file corrotto; il resto lo fa Cask CI.
+          for f in $changed; do ruby -c "$f"; done
+
+      - name: Commit & push
+        id: push
+        if: steps.apply.outcome == 'success' && steps.check.outputs.drift != '0' && inputs.check_only != true
+        run: |
+          set -euo pipefail
+          changed="$(git diff --name-only -- Casks)"
+          if [ -z "$changed" ]; then
+            echo "nessun file cambiato: niente da committare"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- Casks
+          # Il messaggio ricalca quello di GoReleaser, che è ciò che questo commit
+          # sta rimpiazzando, ma dice chi l'ha scritto: nella history del tap si
+          # deve vedere che quella versione è arrivata dal sync e non dalla release.
+          {
+            printf 'Sync cask versions from upstream releases\n\n'
+            printf 'Il push di GoReleaser non era arrivato per:\n\n'
+            awk -F'\t' '$1 == "synced" { printf "- %s: %s -> %s\\n", $2, $3, $4 }' applied.tsv
+          } > commit-msg.txt
+          git commit -F commit-msg.txt
+          rm -f commit-msg.txt
+          # GoReleaser pusha qui durante le release: se ci ha battuto sul tempo ci
+          # si rebasa sopra invece di fallire.
+          for i in 1 2 3; do
+            if git pull --rebase --autostash origin main && git push origin HEAD:main; then
+              exit 0
+            fi
+            sleep $((i * 10))
+          done
+          echo "::error::push non riuscito dopo 3 tentativi"
+          exit 1
+
+      - name: Issue di stato
+        if: always()
+        run: |
+          set -euo pipefail
+          title="Cask in drift: una release non è arrivata nel tap"
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          drift="${{ steps.check.outputs.drift }}"
+          if [ -z "${drift:-}" ]; then
+            # Il check stesso è fallito: non si sa se c'è drift, e inventarsi un
+            # "tutto ok" chiudendo la issue sarebbe la cosa peggiore da fare.
+            echo "::warning::il check non ha prodotto un esito, issue lasciata com'è"
+            exit 0
+          fi
+          if [ "$drift" = "0" ]; then
+            scripts/gh-issue.sh ensure-closed "$title" "Tap allineato a tutte le release upstream: $run_url"
+            exit 0
+          fi
+          # Un solo gruppo con una sola redirezione, come il job `report` di
+          # cask-ci.yml. La prosa sta in heredoc quotati: i backtick del markdown
+          # fra apici semplici sarebbero SC2016 (falso positivo) e fra doppi apici
+          # verrebbero eseguiti davvero.
+          {
+            cat <<'MD'
+          Uno o più cask erano fermi a una versione più vecchia della release upstream.
+
+          Vuol dire che il push di GoReleaser non è arrivato: il caso tipico è il PAT del
+          tap scaduto (`HOMEBREW_TAP_TOKEN` / `HOMEBREW_TAP_GITHUB_TOKEN` nel repo del
+          progetto). Fino a quel momento niente diventa rosso — il cask si carica e
+          l'audit passa — semplicemente il tap serve una versione vecchia.
+
+          | stato | cask | tap | upstream |
+          | --- | --- | --- | --- |
+          MD
+            awk -F'\t' '{printf "| %s | `%s` | %s | %s |\n", $1, $2, $3, $4}' sync.tsv
+            if [ -f applied.tsv ] && grep -q '^synced' applied.tsv; then
+              cat <<'MD'
+
+          Questo run ha risincronizzato il tap dagli asset reali della release:
+
+          MD
+              awk -F'\t' '$1 == "synced" { printf "- **%s** %s -> %s\n", $2, $3, $4 }' applied.tsv
+              cat <<'MD'
+
+          **Il sync cura il sintomo, non la causa**: se il token upstream resta scaduto,
+          il prossimo tag si fermerà di nuovo qui.
+          MD
+            fi
+            printf '\nRun: %s\n' "$run_url"
+          } > body.md
+          scripts/gh-issue.sh ensure-open "$title" body.md tap-broken

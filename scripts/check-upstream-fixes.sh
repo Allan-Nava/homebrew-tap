@@ -8,8 +8,18 @@
 # e dice quali sono atterrati, così il workflow apre una issue invece di lasciare
 # che l'item invecchi nel BACKLOG.
 #
-# Stampa TSV: stato(landed|pending) <TAB> id <TAB> messaggio. Exit 0 sempre —
+# Stampa TSV: stato(landed|pending|done) <TAB> id <TAB> messaggio. Exit 0 sempre —
 # "pending" è la normalità, non un errore.
+#
+#   pending  il fix non è ancora atterrato: si aspetta la release upstream
+#   landed   è atterrato e **qui c'è ancora qualcosa da fare** (tipicamente
+#            togliere l'esclusione da cask-ci.yml) → il workflow apre la issue
+#   done     atterrato e già recepito: niente da fare, la issue va chiusa
+#
+# Lo stato `done` esiste perché senza di lui la issue "Fix upstream arrivato"
+# diventava immortale: `gh-issue.sh ensure-open` riapre una issue chiusa, quindi
+# una volta atterrato il fix la notifica tornava a ogni run anche dopo averla
+# recepita — e chiuderla a mano non serviva a niente.
 set -euo pipefail
 
 CASK="${CASK:-Casks/checkfleet.rb}"
@@ -18,6 +28,15 @@ CASK="${CASK:-Casks/checkfleet.rb}"
 # Cask di segcheck: sorvegliato per HT-21. Manca (o è rinominato) → l'unico check
 # che lo riguarda si salta, gli altri restano validi.
 SEGCHECK_CASK="${SEGCHECK_CASK:-Casks/segcheck.rb}"
+
+# Il workflow dove vivono le esclusioni di `brew style`: è lì che si vede se un
+# fix atterrato è già stato recepito.
+CI_WORKFLOW="${CI_WORKFLOW:-.github/workflows/cask-ci.yml}"
+
+# `excluded <Cop>` → vero se quel cop è ancora fra le esclusioni dei cask generati.
+excluded() {
+  [ -f "$CI_WORKFLOW" ] && grep -q -- "--except-cops" "$CI_WORKFLOW" && grep -q -- "$1" "$CI_WORKFLOW"
+}
 
 report() { printf '%s\t%s\t%s\n' "$1" "$2" "$3"; }
 
@@ -31,8 +50,10 @@ fi
 # HT-2 — `desc` che inizia con un articolo (offense Cask/Desc).
 if grep -Eq '^[[:space:]]*desc "(A|An|The) ' "$CASK"; then
   report pending HT-2 "\`desc\` inizia ancora con un articolo: \`brew style\` resta rosso senza l'esclusione \`Cask/Desc\`. Fix upstream: cambiare \`description:\` in \`.goreleaser.yaml\`."
+elif excluded Cask/Desc; then
+  report landed HT-2 "\`desc\` non inizia più con un articolo: togli \`Cask/Desc\` da \`--except-cops\` in \`cask-ci.yml\`, poi spunta HT-2."
 else
-  report landed HT-2 "\`desc\` non inizia più con un articolo: togli \`Cask/Desc\` da \`--except-cops\` in \`cask-ci.yml\` e \`desktop-cask.yml\`, poi spunta HT-2."
+  report "done" HT-2 "\`desc\` a posto e esclusione già rimossa: niente da fare."
 fi
 
 # HT-7 — caveats post-install.
@@ -50,6 +71,8 @@ if [ ! -f "$SEGCHECK_CASK" ]; then
   report pending HT-21 "\`$SEGCHECK_CASK\` non c'è: niente da controllare per HT-21 (cask rinominato o rimosso dal tap?)."
 elif grep -Eq 'exit_status[[:space:]]*==[[:space:]]*0' "$SEGCHECK_CASK"; then
   report pending HT-21 "Il postflight di segcheck confronta ancora \`exit_status == 0\`: \`brew style\` resta rosso senza l'esclusione \`Style/NumericPredicate\`. Fix upstream nel \`.goreleaser.yaml\` di segcheck (\`.exit_status.zero?\`, o la forma usata da checkfleet)."
-else
+elif excluded Style/NumericPredicate; then
   report landed HT-21 "Il postflight di segcheck non confronta più \`exit_status == 0\`: togli \`Style/NumericPredicate\` da \`--except-cops\` in \`cask-ci.yml\`, poi spunta HT-21."
+else
+  report "done" HT-21 "Postflight a posto e esclusione già rimossa: niente da fare."
 fi

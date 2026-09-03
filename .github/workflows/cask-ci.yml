@@ -70,7 +70,6 @@ jobs:
         #    motivate. Il file è riscritto a ogni release, quindi qui non si corregge
         #    niente — o si sistema a monte o si esclude il cop.
         #      Cask/Desc                          `desc "A fleet of..."`  → HT-2  (upstream checkfleet)
-        #      Style/NumericPredicate             `exit_status == 0`      → HT-21 (upstream segcheck)
         #      Layout/EmptyLinesAroundBlockBody   template GoReleaser     → HT-22
         #      Cask/StanzaOrder                   template GoReleaser     → HT-22
         #      Cask/StanzaGrouping                template GoReleaser     → HT-22
@@ -95,7 +94,7 @@ jobs:
           if [ "${#generated[@]}" -gt 0 ]; then
             echo "::group::cask generati (con esclusioni)"
             brew style --except-cops \
-              Cask/Desc,Style/NumericPredicate,Layout/EmptyLinesAroundBlockBody,Cask/StanzaOrder,Cask/StanzaGrouping,Layout/FirstArrayElementIndentation \
+              Cask/Desc,Layout/EmptyLinesAroundBlockBody,Cask/StanzaOrder,Cask/StanzaGrouping,Layout/FirstArrayElementIndentation \
               "${generated[@]}"
             echo "::endgroup::"
           fi
@@ -149,7 +148,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, macos-13] # arm64, intel — i due rami del cask generato
+        # arm64 + intel: i due rami del cask generato. `macos-13` è stato ritirato
+        # da GitHub e non è più un label valido — la leg non veniva schedulata,
+        # restava in coda **24 ore** e poi il run finiva `cancelled` (run
+        # 33404960814: 31/08 14:50 → 01/09 14:51, tutto il resto verde). Da lì
+        # `macos-15-intel`, che è un runner Intel vero e non Rosetta su arm.
+        os: [macos-14, macos-15-intel]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -270,16 +274,27 @@ jobs:
           scripts/check-upstream-fixes.sh | tee fixes.tsv
           while IFS=$'\t' read -r status id msg <&3; do
             title="Fix upstream arrivato: $id"
-            if [ "$status" = "landed" ]; then
-              {
-                printf '%s\n\n' "$msg"
-                printf 'Rilevato da `scripts/check-upstream-fixes.sh` sui cask generati.\n\n'
-                printf 'Run: %s/%s/actions/runs/%s\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
-              } > body.md
-              scripts/gh-issue.sh ensure-open "$title" body.md backlog
-            else
-              scripts/gh-issue.sh ensure-closed "$title" "Non più attuale: il cask generato non contiene (più) il fix."
-            fi
+            case "$status" in
+              landed)
+                # Atterrato e ancora da recepire qui: è l'unico caso che merita
+                # una issue aperta.
+                {
+                  printf '%s\n\n' "$msg"
+                  printf 'Rilevato da `scripts/check-upstream-fixes.sh` sui cask generati.\n\n'
+                  printf 'Run: %s/%s/actions/runs/%s\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
+                } > body.md
+                scripts/gh-issue.sh ensure-open "$title" body.md backlog
+                ;;
+              done)
+                # Atterrato E già recepito. Senza questo ramo la issue era
+                # immortale: `ensure-open` riapre anche una issue chiusa a mano,
+                # quindi la notifica tornava a ogni run per un lavoro già fatto.
+                scripts/gh-issue.sh ensure-closed "$title" "Fix atterrato e già recepito nel tap: niente da fare."
+                ;;
+              *)
+                scripts/gh-issue.sh ensure-closed "$title" "Non più attuale: il cask generato non contiene (più) il fix."
+                ;;
+            esac
           done 3< fixes.tsv
 
   report:
