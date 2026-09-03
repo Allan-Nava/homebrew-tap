@@ -137,6 +137,18 @@ jobs:
       - name: shellcheck
         run: shellcheck scripts/*.sh
 
+      - name: Il README elenca i cask che ci sono davvero
+        # Warning e non errore, di proposito. Su main il render lo fa `cask-sync.yml`
+        # subito dopo il commit del bot, quindi un rosso qui sarebbe rosso per pochi
+        # minuti e aprirebbe la issue "Tap rotto" per un ritardo di documentazione —
+        # esattamente il rumore che ha fatto rimuovere il workflow template (HT-19).
+        # Su una PR invece è l'autore che deve rigenerare, e il warning glielo dice.
+        run: |
+          set -euo pipefail
+          if ! scripts/render-readme-casks.sh --check; then
+            echo "::warning file=README.md::Gli elenchi del README non combaciano con Casks/ — rigenera con scripts/render-readme-casks.sh (su main lo fa cask-sync.yml)"
+          fi
+
       - name: Riferimenti tra job coerenti
         # Un `needs:` verso un job cancellato non dà un errore leggibile: il
         # workflow diventa invalido e il run fallisce senza job né log.

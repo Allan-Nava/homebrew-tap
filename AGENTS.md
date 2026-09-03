@@ -37,6 +37,7 @@ DRY_RUN=1 scripts/gh-issue.sh ensure-open "<titolo>" body.md <label>
 
 ## Trappole note
 
+- **Nel README gli elenchi dei cask sono generati** da `scripts/render-readme-casks.sh` (fra marker `<!-- BEGIN generated: … -->`), la prosa no. Se aggiungi un cask non scrivere la riga a mano: rigenera. Lo fa anche `cask-sync.yml` a ogni push su `Casks/**` (HT-27).
 - **Un cask indietro non fa diventare rosso niente**: se il PAT del tap scade upstream, la release pubblica tutto tranne il push qui e il tap serve una versione vecchia con tutti i gate verdi. Il detector è `scripts/sync-cask-versions.sh` (`--check` diagnostica, `--apply` risincronizza dagli asset veri), girato ogni 6h da `cask-sync.yml`. La causa però è il token nel repo del progetto (HT-26).
 - **`brew audit --online` vuole un token GitHub**: senza, sono 60 richieste/ora per IP (condiviso, sui runner) e l'audit fallisce con `exception while auditing <cask>` — job rosso per un problema che non è del tap. In CI c'è già nell'`env` dei workflow; in locale `HOMEBREW_GITHUB_API_TOKEN="$(gh auth token)"` (HT-24).
 - **I cask fuori da un tap sono rifiutati**: `brew info --cask ./Casks/x.rb` → "Homebrew requires casks to be in a tap". Ogni validazione passa da `scripts/ci-place-tap.sh`.

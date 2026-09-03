@@ -18,6 +18,13 @@ name: Cask sync
 # sistemata nel repo del progetto, o al prossimo tag si ricomincia.
 
 on:
+  push:
+    branches: [main]
+    # Il commit del bot che porta il cask di un progetto nuovo: è il momento in cui
+    # il README diventa incompleto, quindi conviene reagire subito invece di
+    # aspettare il cron. Nessun rischio di loop: il push che fa questo job usa il
+    # GITHUB_TOKEN, e i push fatti col GITHUB_TOKEN non innescano workflow.
+    paths: ["Casks/**"]
   schedule:
     # Sfasato dal cron di desktop-cask.yml (`20 */6`): sono due writer sullo
     # stesso repo e condividono il gruppo di concurrency `tap-write`.
@@ -72,37 +79,57 @@ jobs:
           set -euo pipefail
           scripts/sync-cask-versions.sh --apply | tee applied.tsv
 
+      - name: Il README elenca i cask che ci sono davvero
+        if: inputs.check_only != true
+        run: |
+          set -euo pipefail
+          # Gira sempre, non solo quando c'è drift: il cask di un progetto nuovo
+          # arriva **già allineato** (la release è appena stata pubblicata), quindi
+          # non è drift — ma il README non lo menziona. È il caso di abrsim.
+          scripts/render-readme-casks.sh
+
+      - name: Cosa è cambiato
+        id: diff
+        if: inputs.check_only != true
+        run: |
+          set -euo pipefail
+          if [ -n "$(git status --porcelain -- Casks README.md)" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git status --short -- Casks README.md
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "niente da committare"
+          fi
+
       - name: I cask riscritti sono ancora file Ruby validi
-        if: steps.apply.outcome == 'success' && steps.check.outputs.drift != '0' && inputs.check_only != true
+        if: steps.diff.outputs.changed == 'true'
         run: |
           set -euo pipefail
           changed="$(git diff --name-only -- Casks)"
-          [ -n "$changed" ] || { echo "niente da validare"; exit 0; }
+          [ -n "$changed" ] || { echo "nessun cask toccato (solo README)"; exit 0; }
           # `ruby -c` non valuta il DSL del cask: controlla solo che il file sia
           # parsabile. Basta a non pushare un file corrotto; il resto lo fa Cask CI.
           for f in $changed; do ruby -c "$f"; done
 
       - name: Commit & push
-        id: push
-        if: steps.apply.outcome == 'success' && steps.check.outputs.drift != '0' && inputs.check_only != true
+        if: steps.diff.outputs.changed == 'true'
         run: |
           set -euo pipefail
-          changed="$(git diff --name-only -- Casks)"
-          if [ -z "$changed" ]; then
-            echo "nessun file cambiato: niente da committare"
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- Casks
-          # Il messaggio ricalca quello di GoReleaser, che è ciò che questo commit
-          # sta rimpiazzando, ma dice chi l'ha scritto: nella history del tap si
-          # deve vedere che quella versione è arrivata dal sync e non dalla release.
-          {
-            printf 'Sync cask versions from upstream releases\n\n'
-            printf 'Il push di GoReleaser non era arrivato per:\n\n'
-            awk -F'\t' '$1 == "synced" { printf "- %s: %s -> %s\\n", $2, $3, $4 }' applied.tsv
-          } > commit-msg.txt
+          git add -- Casks README.md
+          # Il soggetto dice quale dei due lavori è stato fatto: risincronizzare un
+          # cask e riallineare il README sono cose diverse, e nella history del tap
+          # si deve capire quale è stata (e che non è stata una release).
+          if [ -f applied.tsv ] && grep -q '^synced' applied.tsv; then
+            {
+              printf 'Sync cask versions from upstream releases\n\n'
+              printf 'Il push di GoReleaser non era arrivato per:\n\n'
+              awk -F'\t' '$1 == "synced" { printf "- %s: %s -> %s\\n", $2, $3, $4 }' applied.tsv
+            } > commit-msg.txt
+          else
+            printf 'docs: riallinea gli elenchi del README ai cask del tap\n' > commit-msg.txt
+          fi
           git commit -F commit-msg.txt
           rm -f commit-msg.txt
           # GoReleaser pusha qui durante le release: se ci ha battuto sul tempo ci

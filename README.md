@@ -4,14 +4,16 @@ Homebrew tap for Allan-Nava projects.
 
 ## Install
 
+<!-- BEGIN generated: install (scripts/render-readme-casks.sh) -->
 ```bash
 brew tap Allan-Nava/tap
-brew install --cask checkfleet          # CLI
-brew install --cask checkfleet-desktop  # desktop app (macOS)
-brew install --cask segcheck            # CLI
-brew install --cask ladder-bench        # CLI
 brew install --cask abrsim              # CLI
+brew install --cask checkfleet          # CLI
+brew install --cask ladder-bench        # CLI
+brew install --cask segcheck            # CLI
+brew install --cask checkfleet-desktop  # desktop app (macOS)
 ```
+<!-- END generated: install -->
 
 Or in one shot, without tapping first:
 
@@ -24,13 +26,15 @@ Homebrew 6+ may ask you to *trust* a third-party tap on first install
 
 ## What's in here
 
+<!-- BEGIN generated: table (scripts/render-readme-casks.sh) -->
 | Cask | What | Platforms |
 | --- | --- | --- |
-| `checkfleet` | [checkfleet](https://github.com/Allan-Nava/checkfleet) CLI — a fleet of domain-aware infrastructure checks in one binary | macOS `amd64`/`arm64`, Linux `amd64`/`arm64` |
-| `checkfleet-desktop` | the Wails desktop app (`checkfleet.app`, universal binary) | macOS only |
-| `segcheck` | [segcheck](https://github.com/Allan-Nava/segcheck) CLI — checks what HLS/DASH segments really contain, not just what the manifest says | macOS `amd64`/`arm64`, Linux `amd64`/`arm64` |
-| `ladder-bench` | [ladder-bench](https://github.com/Allan-Nava/ladder-bench) CLI — measures an ABR encoding ladder with VMAF instead of inheriting it | macOS `amd64`/`arm64`, Linux `amd64`/`arm64` |
-| `abrsim` | [abrsim](https://github.com/Allan-Nava/abrsim) CLI — simulates what an ABR player does with your HLS ladder on a real network, and reports what it cost the viewer | macOS `amd64`/`arm64`, Linux `amd64`/`arm64` |
+| `abrsim` | [abrsim](https://github.com/Allan-Nava/abrsim) CLI — Simulate what an ABR player does with your HLS ladder on a real network, and report what it cost the viewer | macOS `amd64`/`arm64`, Linux `amd64`/`arm64` |
+| `checkfleet` | [checkfleet](https://github.com/Allan-Nava/checkfleet) CLI — A fleet of domain-aware infrastructure checks in one binary | macOS `amd64`/`arm64`, Linux `amd64`/`arm64` |
+| `ladder-bench` | [ladder-bench](https://allan-nava.github.io/ladder-bench/) CLI — Measure your ABR encoding ladder instead of inheriting it (needs `ffmpeg`) | macOS `amd64`/`arm64`, Linux `amd64`/`arm64` |
+| `segcheck` | [segcheck](https://github.com/Allan-Nava/segcheck) CLI — Check what HLS/DASH segments really contain, not just what the manifest says | macOS `amd64`/`arm64`, Linux `amd64`/`arm64` |
+| `checkfleet-desktop` | [checkfleet Desktop](https://github.com/Allan-Nava/checkfleet) — Desktop app to run the checkfleet infrastructure checks | macOS only |
+<!-- END generated: table -->
 
 All of them ship prebuilt release binaries — nothing is compiled from source. None
 of them is signed or notarized, so every cask strips the `com.apple.quarantine`
@@ -49,21 +53,24 @@ Licensing is not uniform: `checkfleet`, `segcheck` and `abrsim` are
 (free for noncommercial use), while `ladder-bench` is MIT. Check the upstream
 repository before using any of them at work.
 
-Linux users: `checkfleet`, `segcheck`, `ladder-bench` and `abrsim` install on
-Linuxbrew too (a cask whose only artifact is a `binary` is not macOS-only). `checkfleet-desktop` ships a `.app`
-bundle, so it is macOS-only — on Linux grab the desktop tarball from the
+Linux users: every CLI cask here installs on Linuxbrew too — a cask whose only
+artifact is a `binary` is not macOS-only, so the `on_linux` branches above are real.
+`checkfleet-desktop` ships a `.app` bundle, which *is* a macOS-only artifact — on
+Linux grab the desktop tarball from the
 [releases page](https://github.com/Allan-Nava/checkfleet/releases).
 
 ## Upgrade / uninstall
 
+<!-- BEGIN generated: uninstall (scripts/render-readme-casks.sh) -->
 ```bash
-brew upgrade --cask checkfleet
-brew uninstall --cask checkfleet
-brew uninstall --cask segcheck
-brew uninstall --cask ladder-bench
+brew upgrade --cask                 # every installed cask, this tap included
 brew uninstall --cask abrsim
+brew uninstall --cask checkfleet
+brew uninstall --cask ladder-bench
+brew uninstall --cask segcheck
 brew uninstall --cask --zap checkfleet-desktop  # also removes app caches/preferences
 ```
+<!-- END generated: uninstall -->
 
 ## Maintenance
 
@@ -78,6 +85,13 @@ The cask files are **generated, not hand-written**:
   [`scripts/render-desktop-cask.sh`](scripts/render-desktop-cask.sh) through the
   [Desktop cask](.github/workflows/desktop-cask.yml) workflow (GoReleaser doesn't
   build the desktop app, so it can't generate that cask).
+
+The cask lists in this file — the install commands, the table above and the
+uninstall commands — are generated from `Casks/*.rb` by
+[`scripts/render-readme-casks.sh`](scripts/render-readme-casks.sh), between
+`<!-- BEGIN generated: … -->` markers. Edit the prose freely, but run that script
+(or let [Cask sync](.github/workflows/cask-sync.yml) do it) instead of hand-editing
+the lists.
 
 Every change is linted, loaded, installed and audited by
 [Cask CI](.github/workflows/cask-ci.yml). Todos live in [BACKLOG.md](BACKLOG.md);
