@@ -4,6 +4,8 @@
 
 Questo file definisce le regole operative per gli agent (Copilot, Claude, altri tool AI) quando lavorano in questo repository.
 
+Perché il repo esiste e cosa non deve diventare: [`INTENT.md`](INTENT.md). Serve a distinguere "manca" da "deliberatamente assente" prima di aggiungere qualcosa.
+
 ## Regole di lavoro (SEMPRE)
 
 - **MAI editare a mano i file in `Casks/`**: sono generati. `checkfleet.rb`, `segcheck.rb`, `ladder-bench.rb` e `abrsim.rb` li scrive **GoReleaser** dal repo del progetto a ogni tag `v*` → un cambio si fa nel `.goreleaser.yaml` di quel progetto (`homebrew_casks`) e si rilascia. `checkfleet-desktop.rb` lo scrive **`scripts/render-desktop-cask.sh`** (GoReleaser non builda l'app desktop) → un cambio si fa nel template dentro quello script e si rigenera.

@@ -96,4 +96,5 @@ the lists.
 Every change is linted, loaded, installed and audited by
 [Cask CI](.github/workflows/cask-ci.yml). Todos live in [BACKLOG.md](BACKLOG.md);
 the rules for humans and AI agents working here are in [AGENTS.md](AGENTS.md) and
-[CLAUDE.md](CLAUDE.md).
+[CLAUDE.md](CLAUDE.md). Why this tap exists at all, and what it deliberately does
+not do, is in [INTENT.md](INTENT.md).

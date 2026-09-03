@@ -2,6 +2,8 @@
 
 **homebrew-tap** (`github.com/Allan-Nava/homebrew-tap`): il tap Homebrew dei progetti Allan-Nava, usato come `brew tap Allan-Nava/tap` (Homebrew taglia il prefisso `homebrew-`). È un repo di **distribuzione**, non di sviluppo: cask generati + gli script e i workflow che li generano e li validano. Zero codice applicativo, zero build. Oggi cinque cask di quattro progetti: `Casks/checkfleet.rb` (CLI [checkfleet](https://github.com/Allan-Nava/checkfleet)), `Casks/checkfleet-desktop.rb` (app Wails della stessa release), `Casks/segcheck.rb` (CLI [segcheck](https://github.com/Allan-Nava/segcheck)), `Casks/ladder-bench.rb` (CLI [ladder-bench](https://github.com/Allan-Nava/ladder-bench), unico cask con una dipendenza: `ffmpeg`) e `Casks/abrsim.rb` (CLI [abrsim](https://github.com/Allan-Nava/abrsim)).
 
+Lo **scopo** del repo — cosa garantisce, cosa deliberatamente non fa, e i confini con i repo dei progetti — sta in [`INTENT.md`](INTENT.md). Se una modifica è plausibile ma non sta in quel file, vince quel file.
+
 ## Regole di lavoro (SEMPRE)
 
 - **I file in `Casks/` sono generati e NON si editano a mano.** Due sorgenti distinte, non confonderle:
@@ -88,5 +90,5 @@ DRY_RUN=1 scripts/gh-issue.sh ensure-open "<titolo>" body.md <label>
   - `~/projects/github.com/segcheck` — `.goreleaser.yaml` (`homebrew_casks`, token `HOMEBREW_TAP_TOKEN`), `BACKLOG.md` (id `SC-n`)
   - `~/projects/github.com/ladder-bench` — `.goreleaser.yaml` (`homebrew_casks`, `dependencies: ffmpeg`, token `HOMEBREW_TAP_GITHUB_TOKEN`)
   - `~/projects/github.com/abrsim` — `.goreleaser.yaml` (`homebrew_casks`, token `HOMEBREW_TAP_TOKEN`), `BACKLOG.md` (id `AB-n`)
-- Regole di questo repo per tutti gli agent: `AGENTS.md`
+- Intento del repo (scopo, non-obiettivi, confini): `INTENT.md` · regole per tutti gli agent: `AGENTS.md`
 - Repo affini (famiglia Lens/tooling): `~/projects/github.com/ansible-vars-lens`, `nats-lens`, `nomad-lens`
