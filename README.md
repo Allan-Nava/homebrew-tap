@@ -11,6 +11,7 @@ brew install --cask abrsim              # CLI
 brew install --cask checkfleet          # CLI
 brew install --cask galera-doctor       # CLI
 brew install --cask ladder-bench        # CLI
+brew install --cask pqprobe             # CLI
 brew install --cask segcheck            # CLI
 brew install --cask checkfleet-desktop  # desktop app (macOS)
 ```
@@ -34,6 +35,7 @@ Homebrew 6+ may ask you to *trust* a third-party tap on first install
 | `checkfleet` | [checkfleet](https://github.com/Allan-Nava/checkfleet) CLI — A fleet of domain-aware infrastructure checks in one binary | macOS `amd64`/`arm64`, Linux `amd64`/`arm64` |
 | `galera-doctor` | [galera-doctor](https://github.com/Allan-Nava/galera-doctor) CLI — Read-only audit of a Galera cluster: the states its own metrics cannot show | macOS `arm64`/`amd64`, Linux `arm64`/`amd64` |
 | `ladder-bench` | [ladder-bench](https://allan-nava.github.io/ladder-bench/) CLI — Measure your ABR encoding ladder instead of inheriting it (needs `ffmpeg`) | macOS `amd64`/`arm64`, Linux `amd64`/`arm64` |
+| `pqprobe` | [pqprobe](https://allan-nava.github.io/pqprobe/) CLI — Which classes of TLS client can still handshake with this endpoint | macOS `arm64`/`amd64`, Linux `arm64`/`amd64` |
 | `segcheck` | [segcheck](https://github.com/Allan-Nava/segcheck) CLI — Check what HLS/DASH segments really contain, not just what the manifest says | macOS `amd64`/`arm64`, Linux `amd64`/`arm64` |
 | `checkfleet-desktop` | [checkfleet Desktop](https://github.com/Allan-Nava/checkfleet) — Desktop app to run the checkfleet infrastructure checks | macOS only |
 <!-- END generated: table -->
@@ -70,6 +72,7 @@ brew uninstall --cask abrsim
 brew uninstall --cask checkfleet
 brew uninstall --cask galera-doctor
 brew uninstall --cask ladder-bench
+brew uninstall --cask pqprobe
 brew uninstall --cask segcheck
 brew uninstall --cask --zap checkfleet-desktop  # also removes app caches/preferences
 ```
