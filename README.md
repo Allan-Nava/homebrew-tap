@@ -32,7 +32,7 @@ Homebrew 6+ may ask you to *trust* a third-party tap on first install
 | Cask | What | Platforms |
 | --- | --- | --- |
 | `abrsim` | [abrsim](https://github.com/Allan-Nava/abrsim) CLI — Simulate what an ABR player does with your HLS ladder on a real network, and report what it cost the viewer | macOS `amd64`/`arm64`, Linux `amd64`/`arm64` |
-| `checkfleet` | [checkfleet](https://github.com/Allan-Nava/checkfleet) CLI — A fleet of domain-aware infrastructure checks in one binary | macOS `amd64`/`arm64`, Linux `amd64`/`arm64` |
+| `checkfleet` | [checkfleet](https://github.com/Allan-Nava/checkfleet) CLI — A fleet of domain-aware infrastructure checks in one binary | macOS `arm64`/`amd64`, Linux `arm64`/`amd64` |
 | `galera-doctor` | [galera-doctor](https://github.com/Allan-Nava/galera-doctor) CLI — Read-only audit of a Galera cluster: the states its own metrics cannot show | macOS `arm64`/`amd64`, Linux `arm64`/`amd64` |
 | `ladder-bench` | [ladder-bench](https://allan-nava.github.io/ladder-bench/) CLI — Measure your ABR encoding ladder instead of inheriting it (needs `ffmpeg`) | macOS `amd64`/`arm64`, Linux `amd64`/`arm64` |
 | `pqprobe` | [pqprobe](https://allan-nava.github.io/pqprobe/) CLI — Which classes of TLS client can still handshake with this endpoint | macOS `arm64`/`amd64`, Linux `arm64`/`amd64` |
